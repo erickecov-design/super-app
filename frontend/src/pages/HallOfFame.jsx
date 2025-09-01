@@ -1,12 +1,12 @@
 // src/pages/HallOfFame.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { toast } from 'react-hot-toast';
 
 export default function HallOfFame({ session, league }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Form state for commissioner
   const [year, setYear] = useState(new Date().getFullYear() - 1);
   const [championName, setChampionName] = useState('');
   const [story, setStory] = useState('');
@@ -15,11 +15,9 @@ export default function HallOfFame({ session, league }) {
 
   const fetchData = async () => {
     if (!league) return;
-    
-    // Fetch HOF entries for the current league
     const { data: entriesData, error: entriesError } = await supabase
       .from('hall_of_fame_entries')
-      .select('id, year, champion_name, story') // Select the new champion_name column
+      .select('id, year, champion_name, story')
       .eq('league_id', league.id)
       .order('year', { ascending: false });
     
@@ -35,21 +33,21 @@ export default function HallOfFame({ session, league }) {
 
   const handleAddEntry = async (e) => {
     e.preventDefault();
-    if (!year || !championName.trim()) return alert('Year and Champion Name are required.');
+    if (!year || !championName.trim()) return toast.error('Year and Champion Name are required.');
 
     const { error } = await supabase
       .from('hall_of_fame_entries')
       .insert({
         league_id: league.id,
         year,
-        champion_name: championName, // Insert the text name
+        champion_name: championName,
         story,
       });
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
     } else {
-      // Reset form and refetch data
+      toast.success(`${year} Champion immortalized!`);
       setYear(new Date().getFullYear() - 1);
       setChampionName('');
       setStory('');
@@ -67,9 +65,7 @@ export default function HallOfFame({ session, league }) {
         <form onSubmit={handleAddEntry} className="hof-form">
           <h3>Add New Entry</h3>
           <input type="number" placeholder="Year" value={year} onChange={e => setYear(e.target.value)} required />
-          {/* This is the changed input */}
           <input type="text" placeholder="Champion's Name (e.g., 'Erick's Eagles '23')" value={championName} onChange={e => setChampionName(e.target.value)} required />
-          
           <textarea placeholder="Write the story of the season..." value={story} onChange={e => setStory(e.target.value)} />
           <button type="submit">Immortalize</button>
         </form>
@@ -85,7 +81,6 @@ export default function HallOfFame({ session, league }) {
                 <h2>{entry.year}</h2>
                 <div className="hof-champion">
                   <span className="trophy">🏆</span>
-                  {/* Display the text name */}
                   <span>{entry.champion_name}</span>
                 </div>
               </div>
