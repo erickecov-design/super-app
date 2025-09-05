@@ -16,7 +16,6 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Footer from './components/Footer';
 import NewsTicker from './components/NewsTicker';
-import CreateLeague from './pages/CreateLeague';
 import LeagueSwitcher from './components/LeagueSwitcher';
 import LeaguesPage from './pages/LeaguesPage';
 import Media from './pages/Media';

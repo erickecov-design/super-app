@@ -1,5 +1,6 @@
 // src/pages/LeaguesPage.jsx
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { toast } from 'react-hot-toast';
 
@@ -11,12 +12,10 @@ export default function LeaguesPage({ session, onUpdate }) {
 
   useEffect(() => {
     const fetchLeagues = async () => {
+      // Fetches all leagues to browse
       const { data, error } = await supabase.from('leagues').select('id, name');
-      if (error) {
-        console.error("Error fetching leagues:", error);
-      } else {
-        setLeagues(data);
-      }
+      if (error) { console.error("Error fetching leagues:", error); } 
+      else { setLeagues(data); }
       setLoading(false);
     };
     fetchLeagues();
@@ -45,12 +44,13 @@ export default function LeaguesPage({ session, onUpdate }) {
       </div>
       
       <div className="league-browser-card">
-        <h2>Browse Leagues</h2>
+        <h2>Browse All Leagues</h2>
         <div className="league-list">
           {leagues.map(league => (
-            <div key={league.id} className="league-list-item">
+            <Link to={`/league/${league.id}`} key={league.id} className="league-list-item">
               <span>{league.name}</span>
-            </div>
+              <span>&rarr;</span>
+            </Link>
           ))}
         </div>
       </div>
