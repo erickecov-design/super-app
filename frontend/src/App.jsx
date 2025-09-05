@@ -16,9 +16,11 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Footer from './components/Footer';
 import NewsTicker from './components/NewsTicker';
-import LeagueSwitcher from './components/LeagueSwitcher';
+import CreateLeague from './pages/CreateLeague';
 import LeaguesPage from './pages/LeaguesPage';
 import Media from './pages/Media';
+import LeagueHomePage from './pages/LeagueHomePage';
+import LeagueSwitcher from './components/LeagueSwitcher';
 
 const getUserLevel = (marks = 0) => { if (marks <= 1000) return { name: 'Rookie', color: '#6c757d' }; if (marks <= 3500) return { name: 'Intermediate', color: '#007bff' }; if (marks <= 8000) return { name: 'Pro', color: 'black' }; if (marks <= 21500) return { name: 'Legend', color: '#8d99ae' }; return { name: 'Master', color: '#ffd700' }; };
 const getLeagueLevel = (xp = 0) => { if (xp <= 1500000) return { name: 'Orange - Rookie', color: '#ff8c00' }; if (xp <= 3000000) return { name: 'Blue - Intermediate', color: '#007bff' }; if (xp <= 7000000) return { name: 'White - Professional', color: 'black' }; if (xp <= 14500000) return { name: 'Silver - Legend', color: '#8d99ae' }; return { name: 'Gold - Master', color: '#ffd700' }; };
@@ -28,15 +30,16 @@ const MainLayout = ({ children, session, profile, league, handleLogout, onSwitch
   const gamesDropdownRef = useRef(null);
   useEffect(() => { const handleClickOutside = (event) => { if (gamesDropdownRef.current && !gamesDropdownRef.current.contains(event.target)) { setGamesDropdownOpen(false); } }; document.addEventListener("mousedown", handleClickOutside); return () => document.removeEventListener("mousedown", handleClickOutside); }, []);
   return (
-    <div className="app-container">
+    <div className="app-layout-grid">
       <header className="app-header">
         <div className="logo-container"> <Link to="/"> <img src="/logo.png" alt="SUPER Logo" className="super-logo" /> </Link> </div>
-        {session && <LeagueSwitcher session={session} activeLeague={league} onSwitch={onSwitch} />}
-        {session && <nav className="page-nav"> <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''}>War Room</NavLink> <NavLink to="/media" className={({ isActive }) => isActive ? 'active' : ''}>Media</NavLink> <NavLink to="/news" className={({ isActive }) => isActive ? 'active' : ''}>News</NavLink> <NavLink to="/leagues" className={({ isActive }) => isActive ? 'active' : ''}>Leagues</NavLink> <NavLink to="/leaderboards" className={({ isActive }) => isActive ? 'active' : ''}>Leaderboards</NavLink> <NavLink to="/hall-of-fame" className={({ isActive }) => isActive ? 'active' : ''}>Hall of Fame</NavLink> <div className="nav-dropdown" ref={gamesDropdownRef}> <span className="nav-dropdown-label" onClick={() => setGamesDropdownOpen(!isGamesDropdownOpen)}>Games</span> <div className={`nav-dropdown-content ${isGamesDropdownOpen ? 'open' : ''}`}> <NavLink to="/trivia" onClick={() => setGamesDropdownOpen(false)}>Trivia</NavLink> <NavLink to="/paper-football" onClick={() => setGamesDropdownOpen(false)}>Paper Football</NavLink> </div> </div> </nav> }
-        {session && profile && ( <nav className="main-nav"> <div className="user-info"> <Link to="/profile" className="welcome-email">Welcome, <strong>{profile.username}</strong></Link> <div className="user-level" style={{'--level-color': getUserLevel(profile.hash_marks).color}}>{getUserLevel(profile.hash_marks).name} - {profile.hash_marks.toLocaleString()} Marks</div> </div> <button onClick={handleLogout} className="nav-button">Logout</button> </nav> )}
+        <nav className="page-nav"> <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''}>War Room</NavLink> <NavLink to="/media" className={({ isActive }) => isActive ? 'active' : ''}>Media</NavLink> <NavLink to="/news" className={({ isActive }) => isActive ? 'active' : ''}>News</NavLink> <NavLink to="/leagues" className={({ isActive }) => isActive ? 'active' : ''}>Leagues</NavLink> <NavLink to="/leaderboards" className={({ isActive }) => isActive ? 'active' : ''}>Leaderboards</NavLink> <NavLink to="/hall-of-fame" className={({ isActive }) => isActive ? 'active' : ''}>Hall of Fame</NavLink> <div className="nav-dropdown" ref={gamesDropdownRef}> <span className="nav-dropdown-label" onClick={() => setGamesDropdownOpen(!isGamesDropdownOpen)}>Games</span> <div className={`nav-dropdown-content ${isGamesDropdownOpen ? 'open' : ''}`}> <NavLink to="/trivia" onClick={() => setGamesDropdownOpen(false)}>Trivia</NavLink> <NavLink to="/paper-football" onClick={() => setGamesDropdownOpen(false)}>Paper Football</NavLink> </div> </div> </nav>
+        {session && profile && ( <nav className="main-nav"> <LeagueSwitcher session={session} activeLeague={league} onSwitch={onSwitch} /> <div className="user-info"> <Link to="/profile" className="welcome-email">Welcome, <strong>{profile.username}</strong></Link> <div className="user-level" style={{'--level-color': getUserLevel(profile.hash_marks).color}}>{getUserLevel(profile.hash_marks).name} - {profile.hash_marks.toLocaleString()} Marks</div> </div> <button onClick={handleLogout} className="nav-button">Logout</button> </nav> )}
       </header>
-      {session && league && <div className="league-bar"><span className="league-level" style={{ color: getLeagueLevel(league.total_xp).color }}>{getLeagueLevel(league.total_xp).name}</span><span className="league-xp">{league.total_xp.toLocaleString()} XP</span></div>}
-      {session && <NewsTicker />}
+      <div className="ticker-and-league-bar">
+        {session && league && <div className="league-bar"><span className="league-level" style={{ color: getLeagueLevel(league.total_xp).color }}>{getLeagueLevel(league.total_xp).name}</span><span className="league-xp">{league.total_xp.toLocaleString()} XP</span></div>}
+        {session && <NewsTicker />}
+      </div>
       <main className="main-content">{children}</main>
       <Footer />
     </div>
@@ -73,6 +76,7 @@ function App() {
                 <Route path="/media" element={<Media />} />
                 <Route path="/news" element={<News />} />
                 <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
+                <Route path="/league/:leagueId" element={<LeagueHomePage session={session} />} />
                 <Route path="/leaderboards" element={<Leaderboards />} />
                 <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
                 <Route path="/trivia" element={<Trivia />} />

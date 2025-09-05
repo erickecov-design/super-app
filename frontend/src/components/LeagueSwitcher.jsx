@@ -12,7 +12,7 @@ export default function LeagueSwitcher({ session, activeLeague, onSwitch }) {
     const fetchLeagues = async () => {
       const { data, error } = await supabase
         .from('league_members')
-        .select('leagues(*)')
+        .select('leagues(id, name)') // Fetches id and name from the related leagues table
         .eq('profile_id', session.user.id);
       
       if (error) {
@@ -53,6 +53,7 @@ export default function LeagueSwitcher({ session, activeLeague, onSwitch }) {
   return (
     <div className="league-switcher" ref={switcherRef}>
       <div className="active-league" onClick={() => setIsOpen(!isOpen)}>
+        <span className="active-league-label">Active League:</span>
         <span className="league-name">{activeLeague.name}</span>
         <span className="dropdown-arrow">▼</span>
       </div>
