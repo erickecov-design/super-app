@@ -48,7 +48,6 @@ const MainLayout = ({ children, session, profile, league, handleLogout, onSwitch
   );
 };
 
-// Simplified layout for users without a league
 const OnboardingLayout = ({ children, session, handleLogout, profile }) => {
   return (
     <div className="app-layout-grid">
@@ -127,7 +126,6 @@ function App() {
                   <Route path="/leaderboards" element={<Leaderboards />} />
                   <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
                   <Route path="/profile" element={<Profile session={session} profile={profile} league={league} onUpdate={() => setupUser(session.user)} />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </MainLayout>
             )
