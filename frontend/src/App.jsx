@@ -11,7 +11,7 @@ import News from './pages/News';
 import HallOfFame from './pages/HallOfFame';
 import Profile from './pages/Profile';
 import Leaderboards from './pages/Leaderboards';
-import Legal from './pages-Legal';
+import Legal from './pages/Legal'; // Corrected import path
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Footer from './components/Footer';
@@ -20,6 +20,7 @@ import LeaguesPage from './pages/LeaguesPage';
 import Media from './pages/Media';
 import LeagueHomePage from './pages/LeagueHomePage';
 import LeagueSwitcher from './components/LeagueSwitcher';
+import CreateLeague from './pages/CreateLeague';
 
 // --- HELPER FUNCTIONS ---
 const getUserLevel = (marks = 0) => { if (marks <= 1000) return { name: 'Rookie', color: '#6c757d' }; if (marks <= 3500) return { name: 'Intermediate', color: '#007bff' }; if (marks <= 8000) return { name: 'Pro', color: 'black' }; if (marks <= 21500) return { name: 'Legend', color: '#8d99ae' }; return { name: 'Master', color: '#ffd700' }; };
@@ -109,7 +110,6 @@ function App() {
                   <Route path="/leaderboards" element={<Leaderboards />} />
                   <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
                   <Route path="/profile" element={<Profile session={session} profile={profile} league={league} onUpdate={() => setupUser(session.user)} />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </MainLayout>
             )
