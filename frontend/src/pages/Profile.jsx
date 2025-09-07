@@ -12,20 +12,37 @@ export default function Profile({ session, profile, league, onUpdate }) {
   const [username, setUsername] = useState(profile?.username);
   const [uploading, setUploading] = useState(false);
   const [userRank, setUserRank] = useState(null);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => { setUsername(profile?.username); }, [profile]);
 
   useEffect(() => {
-    const fetchRank = async () => {
-      if (session?.user?.id) {
-        const { data, error } = await supabase.rpc('get_user_rank', { user_id_arg: session.user.id });
-        if (error) console.error("Error fetching user rank:", error);
-        else setUserRank(data);
-      }
+    const fetchData = async () => {
+      if (!session?.user?.id) return;
+
+      // Fetch user's rank
+      const { data: rankData, error: rankError } = await supabase.rpc('get_user_rank', { user_id_arg: session.user.id });
+      if (rankError) console.error("Error fetching user rank:", rankError);
+      else setUserRank(rankData);
+
+      // Fetch pending requests using our new, simple function
+      const { data: requests, error: requestsError } = await supabase.rpc('get_pending_requests_for_commissioner');
+      if (requestsError) console.error("Error fetching pending requests:", requestsError);
+      else setPendingRequests(requests);
     };
-    fetchRank();
-  }, [session]);
+    
+    fetchData();
+  }, [session, profile, league]);
+  
+  const handleRequest = async (memberRowId, status) => {
+    const { error } = await supabase.rpc('manage_join_request', { member_row_id: memberRowId, new_status: status });
+    if (error) { toast.error(error.message); } 
+    else { 
+      toast.success(`Request ${status}.`);
+      setPendingRequests(pendingRequests.filter(req => req.id !== memberRowId));
+    }
+  };
   
   const handleUpload = async (event) => {
     try {
@@ -86,6 +103,26 @@ export default function Profile({ session, profile, league, onUpdate }) {
           <li><span>League XP:</span> <strong>{(league?.total_xp || 0).toLocaleString()}</strong></li>
         </ul>
       </div>
+
+      {pendingRequests && pendingRequests.length > 0 && (
+        <div className="commissioner-tools profile-card" style={{marginTop: '30px'}}>
+          <h3>Pending Join Requests</h3>
+          <ul className="member-list">
+            {pendingRequests.map(req => (
+              <li key={req.id}>
+                <div className="member-info">
+                  <Avatar url={req.profile_avatar_url} size={30} />
+                  <span><strong>{req.profile_username}</strong> wants to join <strong>{req.league_name}</strong></span>
+                </div>
+                <div className="request-actions">
+                  <button className="approve-btn" onClick={() => handleRequest(req.id, 'approved')}>Approve</button>
+                  <button className="deny-btn" onClick={() => handleRequest(req.id, 'denied')}>Deny</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

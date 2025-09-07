@@ -15,23 +15,44 @@ export default function LeagueHomePage({ session }) {
   const isCommissioner = league && session && league.commissioner_id === session.user.id;
 
   const fetchLeagueData = async () => {
+    setLoading(true);
+    
     // Fetch league details
-    const { data: leagueData, error: leagueError } = await supabase.from('leagues').select('*').eq('id', leagueId).single();
+    const { data: leagueData, error: leagueError } = await supabase
+      .from('leagues')
+      .select('*')
+      .eq('id', leagueId)
+      .single();
     if (leagueError) console.error("Error fetching league details:", leagueError);
     else setLeague(leagueData);
 
-    // Fetch all members (approved and pending)
-    const { data: membersData, error: membersError } = await supabase.from('league_members').select('id, status, profiles(*)').eq('league_id', leagueId);
+    // Fetch ONLY approved members for this league
+    const { data: membersData, error: membersError } = await supabase
+      .from('league_members')
+      .select('id, status, profiles(*)')
+      .eq('league_id', leagueId)
+      .eq('status', 'approved'); // This is more efficient
     if (membersError) console.error("Error fetching members:", membersError);
-    else {
-      setMembers(membersData.filter(m => m.status === 'approved'));
-      setPendingRequests(membersData.filter(m => m.status === 'pending'));
+    else setMembers(membersData);
+
+    // If the current user is the commissioner, also fetch pending requests
+    if (leagueData && session && leagueData.commissioner_id === session.user.id) {
+      const { data: requestsData, error: requestsError } = await supabase
+        .from('league_members')
+        .select('id, status, profiles(*)')
+        .eq('league_id', leagueId)
+        .eq('status', 'pending');
+      if (requestsError) console.error("Error fetching pending requests:", requestsError);
+      else setPendingRequests(requestsData);
     }
+    
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchLeagueData();
+    if (leagueId && session) {
+      fetchLeagueData();
+    }
   }, [leagueId, session]);
 
   const handleRequest = async (memberRowId, status) => {
@@ -40,7 +61,7 @@ export default function LeagueHomePage({ session }) {
       toast.error(error.message);
     } else {
       toast.success(`Request ${status}.`);
-      fetchLeagueData(); // Refresh the data
+      fetchLeagueData(); // Refresh all the data on the page
     }
   };
 
@@ -83,7 +104,7 @@ export default function LeagueHomePage({ session }) {
           <h3>Members ({members.length})</h3>
           <ul className="member-list">
             {members.map(member => (
-              <li key={member.id}>
+              <li key={member.profiles.id}>
                 <div className="member-info">
                   <Avatar url={member.profiles.avatar_url} size={30} />
                   <span>{member.profiles.username}</span>
