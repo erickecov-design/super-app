@@ -1,6 +1,6 @@
 // src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Link, Navigate, NavLink, useLocation } from "react-router-dom";
+import { Routes, Route, Link, Navigate, NavLink } from "react-router-dom";
 import { supabase } from './supabaseClient';
 import { Toaster, toast } from 'react-hot-toast';
 import { PulseLoader } from 'react-spinners';
@@ -26,21 +26,13 @@ import CreateLeague from './pages/CreateLeague';
 const getUserLevel = (marks = 0) => { if (marks <= 1000) return { name: 'Rookie', color: '#6c757d' }; if (marks <= 3500) return { name: 'Intermediate', color: '#007bff' }; if (marks <= 8000) return { name: 'Pro', color: 'black' }; if (marks <= 21500) return { name: 'Legend', color: '#8d99ae' }; return { name: 'Master', color: '#ffd700' }; };
 const getLeagueLevel = (xp = 0) => { if (xp <= 1500000) return { name: 'Orange - Rookie', color: '#ff8c00' }; if (xp <= 3000000) return { name: 'Blue - Intermediate', color: '#007bff' }; if (xp <= 7000000) return { name: 'White - Professional', color: 'black' }; if (xp <= 14500000) return { name: 'Silver - Legend', color: '#8d99ae' }; return { name: 'Gold - Master', color: '#ffd700' }; };
 
-// --- MAIN LAYOUT COMPONENT ---
-// This component contains the shared layout for the main app
+// --- LAYOUT COMPONENTS ---
 const MainLayout = ({ children, session, profile, league, handleLogout, onSwitch }) => {
   return (
     <div className="app-layout-grid">
       <header className="app-header">
         <div className="logo-container"> <Link to="/"> <img src="/logo.png" alt="SUPER Logo" className="super-logo" /> </Link> </div>
-        <nav className="page-nav">
-          <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''}>War Room</NavLink>
-          <NavLink to="/media" className={({ isActive }) => isActive ? 'active' : ''}>Media</NavLink>
-          <NavLink to="/news" className={({ isActive }) => isActive ? 'active' : ''}>News</NavLink>
-          <NavLink to="/leagues" className={({ isActive }) => isActive ? 'active' : ''}>Leagues</NavLink>
-          <NavLink to="/leaderboards" className={({ isActive }) => isActive ? 'active' : ''}>Leaderboards</NavLink>
-          <NavLink to="/hall-of-fame" className={({ isActive }) => isActive ? 'active' : ''}>Hall of Fame</NavLink>
-        </nav>
+        <nav className="page-nav"> <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''}>War Room</NavLink> <NavLink to="/media" className={({ isActive }) => isActive ? 'active' : ''}>Media</NavLink> <NavLink to="/news" className={({ isActive }) => isActive ? 'active' : ''}>News</NavLink> <NavLink to="/leagues" className={({ isActive }) => isActive ? 'active' : ''}>Leagues</NavLink> <NavLink to="/leaderboards" className={({ isActive }) => isActive ? 'active' : ''}>Leaderboards</NavLink> <NavLink to="/hall-of-fame" className={({ isActive }) => isActive ? 'active' : ''}>Hall of Fame</NavLink> </nav>
         <div className="header-right-section">
           <LeagueSwitcher session={session} activeLeague={league} onSwitch={onSwitch} />
           {profile && ( <nav className="main-nav"> <div className="user-info"> <Link to="/profile" className="welcome-email"> Welcome, <strong>{profile.username}</strong> {profile.role === 'admin' && <span className="admin-badge">Admin</span>} </Link> <div className="user-level" style={{'--level-color': getUserLevel(profile.hash_marks).color}}>{getUserLevel(profile.hash_marks).name} - {profile.hash_marks.toLocaleString()} Marks</div> <button onClick={handleLogout} className="nav-button logout-btn">Logout</button> </div> </nav> )}
@@ -56,17 +48,49 @@ const MainLayout = ({ children, session, profile, league, handleLogout, onSwitch
   );
 };
 
+// Simplified layout for users without a league
+const OnboardingLayout = ({ children, session, handleLogout, profile }) => {
+  return (
+    <div className="app-layout-grid">
+      <header className="app-header">
+        <div className="logo-container"> <img src="/logo.png" alt="SUPER Logo" className="super-logo" /> </div>
+        {profile && ( <nav className="main-nav"> <div className="user-info"> <span>Welcome, <strong>{profile.username}</strong></span> </div> <button onClick={handleLogout} className="nav-button">Logout</button> </nav> )}
+      </header>
+      <main className="main-content">{children}</main>
+      <Footer />
+    </div>
+  );
+};
+
 // --- APP COMPONENT (Router & State Management) ---
 function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [league, setLeague] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const setupUser = async (user) => { if (!user) { setProfile(null); setLeague(null); setLoading(false); return; } try { const { data: userProfile, error: profileError } = await supabase.from('profiles').select('*, football_level').eq('id', user.id).single(); if (profileError) throw profileError; setProfile(userProfile); if (userProfile?.active_league_id) { const { data: leagueData, error: leagueError } = await supabase.from('leagues').select('*').eq('id', userProfile.active_league_id).single(); if (leagueError) throw leagueError; setLeague(leagueData); } else { setLeague(null); } } catch (error) { console.error("Error setting up user:", error); } finally { setLoading(false); } };
   useEffect(() => { const getSessionAndSetup = async () => { const { data: { session } } = await supabase.auth.getSession(); setSession(session); await setupUser(session?.user); }; getSessionAndSetup(); const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); }); return () => subscription.unsubscribe(); }, []);
   useEffect(() => { setupUser(session?.user); }, [session]);
-  useEffect(() => { if (!session?.user?.id) return; try { const membershipChannel = supabase.channel(`public:league_members:profile_id=eq.${session.user.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'league_members', filter: `profile_id=eq.${session.user.id}` }, (payload) => { setupUser(session.user); }).subscribe(); return () => { supabase.removeChannel(membershipChannel); }; } catch (error) { console.error("Failed to subscribe to membership updates:", error); } }, [session]);
+  
+  // This real-time listener is now simplified because the database does the heavy lifting.
+  // It only needs to watch for changes to the user's own profile.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    try {
+      const profileChannel = supabase.channel(`public:profiles:id=eq.${session.user.id}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` },
+          (payload) => {
+            console.log('Profile change detected, refetching user data:', payload);
+            setupUser(session.user);
+          }
+        )
+        .subscribe();
+      return () => { supabase.removeChannel(profileChannel); };
+    } catch (error) {
+      console.error("Failed to subscribe to profile updates:", error);
+    }
+  }, [session]);
   
   const handleLogout = async () => await supabase.auth.signOut();
 
@@ -80,36 +104,35 @@ function App() {
         <Route path="/signup" element={session ? <Navigate to="/" replace /> : <SignupPage />} />
         <Route path="/legal" element={<Legal />} />
 
-        {/* This is the new, robust routing logic */}
         <Route path="/*" element={
-            !session ? (
-              <Navigate to="/login" replace />
+          !session ? (
+            <Navigate to="/login" replace />
+          ) : (
+            // This is the new, simpler routing logic
+            profile && !profile.active_league_id ? (
+              <OnboardingLayout session={session} profile={profile} handleLogout={handleLogout}>
+                <Routes>
+                  <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
+                  <Route path="*" element={<Navigate to="/leagues" replace />} />
+                </Routes>
+              </OnboardingLayout>
             ) : (
               <MainLayout session={session} profile={profile} league={league} handleLogout={handleLogout} onSwitch={() => setupUser(session.user)}>
                 <Routes>
-                  {profile && !profile.active_league_id ? (
-                    <>
-                      <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
-                      <Route path="*" element={<Navigate to="/leagues" replace />} />
-                    </>
-                  ) : (
-                    <>
-                      <Route path="/" element={<WarRoom session={session} profile={profile} />} />
-                      <Route path="/media" element={<Media />} />
-                      <Route path="/news" element={<News />} />
-                      <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
-                      <Route path="/league/:leagueId" element={<LeagueHomePage session={session} />} />
-                      <Route path="/leaderboards" element={<Leaderboards />} />
-                      <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
-                      <Route path="/profile" element={<Profile session={session} profile={profile} league={league} onUpdate={() => setupUser(session.user)} />} />
-                      <Route path="*" element={<Navigate to="/" replace />} />
-                    </>
-                  )}
+                  <Route path="/" element={<WarRoom session={session} profile={profile} />} />
+                  <Route path="/media" element={<Media />} />
+                  <Route path="/news" element={<News />} />
+                  <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
+                  <Route path="/league/:leagueId" element={<LeagueHomePage session={session} />} />
+                  <Route path="/leaderboards" element={<Leaderboards />} />
+                  <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
+                  <Route path="/profile" element={<Profile session={session} profile={profile} league={league} onUpdate={() => setupUser(session.user)} />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </MainLayout>
             )
-          }
-        />
+          )
+        }/>
       </Routes>
     </>
   );
