@@ -18,12 +18,14 @@ import LeaguesPage from './pages/LeaguesPage';
 import Media from './pages/Media';
 import LeagueHomePage from './pages/LeagueHomePage';
 import LeagueSwitcher from './components/LeagueSwitcher';
-import CreateLeague from './pages/CreateLeague';
 
 const getUserLevel = (marks = 0) => { if (marks <= 1000) return { name: 'Rookie', color: '#6c757d' }; if (marks <= 3500) return { name: 'Intermediate', color: '#007bff' }; if (marks <= 8000) return { name: 'Pro', color: 'black' }; if (marks <= 21500) return { name: 'Legend', color: '#8d99ae' }; return { name: 'Master', color: '#ffd700' }; };
 const getLeagueLevel = (xp = 0) => { if (xp <= 1500000) return { name: 'Orange - Rookie', color: '#ff8c00' }; if (xp <= 3000000) return { name: 'Blue - Intermediate', color: '#007bff' }; if (xp <= 7000000) return { name: 'White - Professional', color: 'black' }; if (xp <= 14500000) return { name: 'Silver - Legend', color: '#8d99ae' }; return { name: 'Gold - Master', color: '#ffd700' }; };
 
 const MainLayout = ({ children, session, profile, league, handleLogout, onSwitch }) => {
+  const [isGamesDropdownOpen, setGamesDropdownOpen] = useState(false);
+  const gamesDropdownRef = useRef(null);
+  useEffect(() => { const handleClickOutside = (event) => { if (gamesDropdownRef.current && !gamesDropdownRef.current.contains(event.target)) { setGamesDropdownOpen(false); } }; document.addEventListener("mousedown", handleClickOutside); return () => document.removeEventListener("mousedown", handleClickOutside); }, []);
   return (
     <div className="app-layout-grid">
       <header className="app-header">
@@ -52,7 +54,10 @@ const MainLayout = ({ children, session, profile, league, handleLogout, onSwitch
           )}
         </div>
       </header>
-      <NewsTicker />
+      <div className="ticker-and-league-bar">
+        {league && <div className="league-bar"><span className="league-level" style={{ color: getLeagueLevel(league.total_xp).color }}>{getLeagueLevel(league.total_xp).name}</span><span className="league-xp">{league.total_xp.toLocaleString()} XP</span></div>}
+        <NewsTicker />
+      </div>
       <main className="main-content">{children}</main>
       <Footer />
     </div>
@@ -66,23 +71,17 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   const setupUser = async (user) => {
+    if (!user) {
+      setProfile(null);
+      setLeague(null);
+      setLoading(false);
+      return;
+    }
     try {
-      if (!user) {
-        setProfile(null);
-        setLeague(null);
-        return;
-      }
-      // FIX: Removed 'football_level' from the query as it no longer exists.
-      // Explicitly listed all required columns for robustness.
-      const { data: userProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, username, role, active_league_id, hash_marks, avatar_url')
-        .eq('id', user.id)
-        .single();
-      
+      const { data: userProfile, error: profileError } = await supabase.from('profiles').select('*, football_level').eq('id', user.id).single();
       if (profileError) throw profileError;
       setProfile(userProfile);
-      
+
       if (userProfile?.active_league_id) {
         const { data: leagueData, error: leagueError } = await supabase.from('leagues').select('*').eq('id', userProfile.active_league_id).single();
         if (leagueError) throw leagueError;
@@ -92,9 +91,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error setting up user:", error);
-      toast.error("Failed to load your profile. Please try refreshing.");
     } finally {
-      // This will now run even if an error occurs, preventing the infinite load.
       setLoading(false);
     }
   };
@@ -103,7 +100,6 @@ function App() {
     const getSessionAndSetup = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
-      await setupUser(session?.user);
     };
     getSessionAndSetup();
     
@@ -117,35 +113,73 @@ function App() {
     setupUser(session?.user);
   }, [session]);
 
-  useEffect(() => { if (!session?.user?.id) return; try { const dataChannel = supabase.channel('public-data-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'leagues', filter: `id=eq.${profile?.active_league_id}`}, payload => setLeague(payload.new)).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}`}, payload => setProfile(payload.new)).subscribe(); return () => { supabase.removeChannel(dataChannel); }; } catch (error) { console.error("Failed to subscribe to real-time updates:", error); } }, [session, profile]);
+  // This is the real-time listener that fixes the "stuck on join page" bug.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    try {
+      const membershipChannel = supabase.channel(`public:league_members:profile_id=eq.${session.user.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'league_members', filter: `profile_id=eq.${session.user.id}` },
+          (payload) => {
+            console.log('Membership change detected, refetching user data:', payload);
+            setupUser(session.user);
+          }
+        )
+        .subscribe();
+      return () => { supabase.removeChannel(membershipChannel); };
+    } catch (error) {
+      console.error("Failed to subscribe to membership updates:", error);
+    }
+  }, [session]);
   
   const handleLogout = async () => await supabase.auth.signOut();
-  if (loading) { return ( <div className="loading-container"> <PulseLoader color={"#007bff"} size={20} /> </div> ) }
-  const ProtectedRoute = ({ children }) => { if (!session) return <Navigate to="/login" replace />; if (profile && !profile.active_league_id) { return <LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />; } return children; };
 
+  if (loading) {
+    return <div className="loading-container"> <PulseLoader color={"#007bff"} size={20} /> </div>;
+  }
+
+  // --- NEW ROBUST ROUTING LOGIC ---
   return (
     <>
       <Toaster position="top-center" reverseOrder={false} toastOptions={{ style: { background: '#333', color: '#fff', }, }} />
       <Routes>
+        {/* Public routes available to everyone */}
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/signup" element={session ? <Navigate to="/" replace /> : <SignupPage />} />
         <Route path="/legal" element={<Legal />} />
+
+        {/* This is the main routing logic */}
         <Route path="/*" element={
-          <ProtectedRoute>
-            <MainLayout session={session} profile={profile} league={league} handleLogout={handleLogout} onSwitch={() => setupUser(session.user)}>
-              <Routes>
-                <Route path="/" element={<WarRoom session={session} profile={profile} />} />
-                <Route path="/media" element={<Media />} />
-                <Route path="/news" element={<News />} />
-                <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
-                <Route path="/league/:leagueId" element={<LeagueHomePage session={session} />} />
-                <Route path="/leaderboards" element={<Leaderboards />} />
-                <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
-                <Route path="/profile" element={<Profile session={session} profile={profile} league={league} onUpdate={() => setupUser(session.user)} />} />
-              </Routes>
-            </MainLayout>
-          </ProtectedRoute>
-        } />
+          !session ? (
+            // If there's no session, always force login
+            <Navigate to="/login" replace />
+          ) : (
+            // If there IS a session...
+            profile && !profile.active_league_id ? (
+              // And the loaded profile has NO active league, show the Leagues page only
+              <MainLayout session={session} profile={profile} league={league} handleLogout={handleLogout} onSwitch={() => setupUser(session.user)}>
+                <Routes>
+                  <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
+                  <Route path="*" element={<Navigate to="/leagues" replace />} />
+                </Routes>
+              </MainLayout>
+            ) : (
+              // If the profile DOES have an active league, show the full app
+              <MainLayout session={session} profile={profile} league={league} handleLogout={handleLogout} onSwitch={() => setupUser(session.user)}>
+                <Routes>
+                  <Route path="/" element={<WarRoom session={session} profile={profile} />} />
+                  <Route path="/media" element={<Media />} />
+                  <Route path="/news" element={<News />} />
+                  <Route path="/leagues" element={<LeaguesPage session={session} onUpdate={() => setupUser(session.user)} />} />
+                  <Route path="/league/:leagueId" element={<LeagueHomePage session={session} />} />
+                  <Route path="/leaderboards" element={<Leaderboards />} />
+                  <Route path="/hall-of-fame" element={<HallOfFame session={session} league={league} />} />
+                  <Route path="/profile" element={<Profile session={session} profile={profile} league={league} onUpdate={() => setupUser(session.user)} />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </MainLayout>
+            )
+          )
+        }/>
       </Routes>
     </>
   );
