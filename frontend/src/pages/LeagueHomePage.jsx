@@ -16,36 +16,16 @@ export default function LeagueHomePage({ session }) {
 
   const fetchLeagueData = async () => {
     setLoading(true);
-    
-    // Fetch league details
-    const { data: leagueData, error: leagueError } = await supabase
-      .from('leagues')
-      .select('*')
-      .eq('id', leagueId)
-      .single();
+    const { data: leagueData, error: leagueError } = await supabase.from('leagues').select('*').eq('id', leagueId).single();
     if (leagueError) console.error("Error fetching league details:", leagueError);
     else setLeague(leagueData);
 
-    // Fetch ONLY approved members for this league
-    const { data: membersData, error: membersError } = await supabase
-      .from('league_members')
-      .select('id, status, profiles(*)')
-      .eq('league_id', leagueId)
-      .eq('status', 'approved'); // This is more efficient
+    const { data: membersData, error: membersError } = await supabase.from('league_members').select('id, status, profiles(*)').eq('league_id', leagueId);
     if (membersError) console.error("Error fetching members:", membersError);
-    else setMembers(membersData);
-
-    // If the current user is the commissioner, also fetch pending requests
-    if (leagueData && session && leagueData.commissioner_id === session.user.id) {
-      const { data: requestsData, error: requestsError } = await supabase
-        .from('league_members')
-        .select('id, status, profiles(*)')
-        .eq('league_id', leagueId)
-        .eq('status', 'pending');
-      if (requestsError) console.error("Error fetching pending requests:", requestsError);
-      else setPendingRequests(requestsData);
+    else {
+      setMembers(membersData.filter(m => m.status === 'approved'));
+      setPendingRequests(membersData.filter(m => m.status === 'pending'));
     }
-    
     setLoading(false);
   };
 
@@ -57,12 +37,8 @@ export default function LeagueHomePage({ session }) {
 
   const handleRequest = async (memberRowId, status) => {
     const { error } = await supabase.rpc('manage_join_request', { member_row_id: memberRowId, new_status: status });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success(`Request ${status}.`);
-      fetchLeagueData(); // Refresh all the data on the page
-    }
+    if (error) { toast.error(error.message); } 
+    else { toast.success(`Request ${status}.`); fetchLeagueData(); }
   };
 
   if (loading) return <h2>Loading League...</h2>;
